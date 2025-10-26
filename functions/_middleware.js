@@ -169,11 +169,11 @@ class AttributeRewriter {
           if (newAttribute.startsWith('/') && !newAttribute.startsWith('//')) {
             newAttribute = `/${this.routePrefix}${newAttribute}`;
           }
-          element.setAttribute(attributeName, newAttribute);
+          element。setAttribute(attributeName， newAttribute);
         }
       };
-      processAttribute(this。attr1);
-      if (this。attr1 !== this。attr2) {
+      processAttribute(this.attr1);
+      if (this.attr1 !== this.attr2) {
         processAttribute(this。attr2);
       }
     }
