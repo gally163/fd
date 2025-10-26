@@ -12,7 +12,7 @@ const routingRules = {
   // 示例:
   // 访问 "your-project.pages.dev/google/" 将代理 "https://www.google.com" 的 HTTP 和 WebSocket
   'google': 'https://www.google.com',
-  'epgdiyp': 'https://tv.mxdyeah.top/epgphp/',
+  'epgdiyp': 'https://tv.mxdyeah.top/epgphp/index.php',
   'epgxml': 'https://tv.mxdyeah.top/epgphp/t.xml',
   
   // 访问 "your-project.pages.dev/ws-test/" 将代理到一个公开的 WebSocket 测试服务
