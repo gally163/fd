@@ -12,9 +12,7 @@ const routingRules = {
   // 示例:
   // 访问 "your-project.pages.dev/google/" 将代理 "https://www.google.com" 的 HTTP 和 WebSocket
   'google': 'https://www.google.com',
-  'epgdiyp': 'https://tv.mxdyeah.top/epgphp/index.php',
-  'epgxml': 'https://tv.mxdyeah.top/epgphp/t.xml',
-  
+
   // 访问 "your-project.pages.dev/ws-test/" 将代理到一个公开的 WebSocket 测试服务
   // 你可以用这个来验证 WebSocket 代理是否成功
   'ws-test': 'https://socketsbay.com', // 目标网站 socketsbay.com/test/
@@ -169,7 +167,7 @@ class AttributeRewriter {
           if (newAttribute.startsWith('/') && !newAttribute.startsWith('//')) {
             newAttribute = `/${this.routePrefix}${newAttribute}`;
           }
-          element.setAttribute(attributeName， newAttribute);
+          element.setAttribute(attributeName, newAttribute);
         }
       };
       processAttribute(this.attr1);
