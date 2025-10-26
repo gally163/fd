@@ -36,6 +36,8 @@
 
 ## 架构掠影 · How It Shines
 
+```mermaid
+
 ```
 
 ## 启程指南 · Quick Start
