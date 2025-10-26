@@ -36,35 +36,6 @@
 
 ## 架构掠影 · How It Shines
 
-```mermaid
-graph TD
-    subgraph 用户 (User's Browser)
-        A[访问 your.pages.dev/site-A/]
-        B[访问 your.pages.dev/site-B/ws]
-    end
-
-    subgraph Starlight Proxy (on Cloudflare Pages)
-        C{_middleware.js}
-        C -- HTTP 请求 --> D[重写请求头 & URL]
-        C -- WebSocket 请求 --> E[建立 WebSocket 通道]
-    end
-
-    subgraph 目标世界 (Target Websites)
-        F[Website A (example.com)]
-        G[Website B (realtime-app.net)]
-    end
-    
-    A --> C
-    B --> C
-    D --> F
-    E --> G
-
-    subgraph 返回之旅 (Response Journey)
-        F -- HTML响应 --> H{HTMLRewriter: 重写链接}
-        G -- WebSocket流 --> E
-    end
-    
-    H --> A
 ```
 
 ## 启程指南 · Quick Start
