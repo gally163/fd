@@ -31,41 +31,58 @@ const defaultTargetUrl = null;
  * --------------------------------------------------------------------------------
  */
 
+// ... (文件顶部的配置区域和其他函数保持不变) ...
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const pathSegments = url.pathname.split('/').filter(Boolean);
   const routePrefix = pathSegments[0];
 
   let targetUrlStr = null;
-  let newPathname = url.pathname;
+  
+  // *** 核心修改点 ***
+  // 我们需要同时确定目标URL和用户请求的子路径
+  let targetUrl;
+  let userSubPath = '/';
 
-  // 1. 寻找匹配的路由，确定目标地址
+  // 1. 寻找匹配的路由
   if (routePrefix && routingRules[routePrefix]) {
     targetUrlStr = routingRules[routePrefix];
-    newPathname = '/' + pathSegments.slice(1).join('/'); // 从路径中移除路由前缀
+    targetUrl = new URL(targetUrlStr);
+    // 获取用户在代理前缀之后输入的路径
+    userSubPath = '/' + pathSegments.slice(1).join('/');
   } else if (defaultTargetUrl) {
     targetUrlStr = defaultTargetUrl;
+    targetUrl = new URL(targetUrlStr);
+    userSubPath = url.pathname;
   } else {
     return new Response(generateHomepage(), {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
   }
 
-  const targetUrl = new URL(targetUrlStr);
-
-  // --- 新增：WebSocket 代理支持 ---
-  // 检查请求头，判断是否是 WebSocket 升级请求
+  // --- WebSocket 代理支持 ---
   const upgradeHeader = context.request.headers.get('Upgrade');
   if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-    // 如果是 WebSocket 请求，则直接进行 TCP 级别的转发
-    return forwardWebSocket(context.request, targetUrl, newPathname);
+    // WebSocket 逻辑需要合并路径，我们构造一个临时的 newPathname
+    const finalWsPath = (targetUrl.pathname.endsWith('/') ? targetUrl.pathname.slice(0, -1) : targetUrl.pathname) + (userSubPath === '/' ? '' : userSubPath);
+    return forwardWebSocket(context.request, targetUrl, finalWsPath);
   }
   // --- WebSocket 逻辑结束 ---
 
 
   // 2. 如果是常规 HTTP 请求，执行以下逻辑
+
+  // *** 核心修改点：智能合并路径 ***
+  // 获取目标配置中的基础路径，例如 "/epgphp/index.php"
+  const targetBasePath = targetUrl.pathname;
+  // 如果用户只访问了根路径（例如 /epgdiyp/），userSubPath 会是 "/"，我们不应将其附加到文件名后
+  const finalPath = (userSubPath === '/') 
+    ? targetBasePath 
+    : (targetBasePath.endsWith('/') ? targetBasePath.slice(0, -1) : targetBasePath) + userSubPath;
+
   const targetRequestUrl = new URL(targetUrl);
-  targetRequestUrl.pathname = newPathname;
+  targetRequestUrl.pathname = finalPath; // 使用合并后的最终路径
   targetRequestUrl.search = url.search;
 
   const newRequest = new Request(targetRequestUrl, context.request);
@@ -76,12 +93,12 @@ export async function onRequest(context) {
   response = new Response(response.body, response);
 
   const proxyHost = url.host;
-  const targetHost = targetUrl.host;
-
+  
   // 3. 重写响应头 (Cookie 和 Location)
+  // ... (这部分逻辑无需修改，保持原样)
   const cookieHeader = response.headers.get('Set-Cookie');
   if (cookieHeader) {
-    const newCookieHeader = cookieHeader.replace(new RegExp(`domain=${targetHost}`, 'gi'), `domain=${proxyHost}`);
+    const newCookieHeader = cookieHeader.replace(new RegExp(`domain=${targetUrl.host}`, 'gi'), `domain=${proxyHost}`);
     response.headers.set('Set-Cookie', newCookieHeader);
   }
 
@@ -92,6 +109,7 @@ export async function onRequest(context) {
   }
 
   // 4. 使用 HTMLRewriter 重写响应体中的链接
+  // ... (这部分逻辑无需修改，保持原样)
   const contentType = response.headers.get('Content-Type');
   if (contentType && contentType.includes('text/html')) {
     const rewriter = new HTMLRewriter()
@@ -103,6 +121,7 @@ export async function onRequest(context) {
   return response;
 }
 
+// ... (文件底部的其他函数保持不变) ...
 
 /**
  * WebSocket 代理函数
