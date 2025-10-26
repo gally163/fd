@@ -33,43 +33,50 @@ const defaultTargetUrl = null;
 
 // ... (文件顶部的配置区域和其他函数保持不变) ...
 
+// ... (文件顶部的配置区域和其他函数保持不变) ...
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
     const routePrefix = pathSegments[0];
 
-    let targetUrlStr = null;
     let targetUrl;
-    let userSubPath = '/';
-
+    
     // 1. 寻找匹配的路由
     if (routePrefix && routingRules[routePrefix]) {
-        targetUrlStr = routingRules[routePrefix];
-        targetUrl = new URL(targetUrlStr);
-        userSubPath = '/' + pathSegments.slice(1).join('/');
+        targetUrl = new URL(routingRules[routePrefix]);
     } else if (defaultTargetUrl) {
-        targetUrlStr = defaultTargetUrl;
-        targetUrl = new URL(targetUrlStr);
-        userSubPath = url.pathname;
+        targetUrl = new URL(defaultTargetUrl);
     } else {
         return new Response(generateHomepage(), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
     }
 
-    // *** 核心修正：智能路径合并 ***
-    // 决定最终请求的路径
+    // *** 全新、更可靠的路径构建逻辑 ***
     const buildFinalPath = () => {
-        let basePath = targetUrl.pathname;
-        const lastSegment = basePath.split('/').pop();
-        
-        // 如果目标路径包含文件名（判断依据：最后一段包含'.')，则使用其父目录作为基础路径
+        // 获取用户在代理前缀之后输入的子路径
+        const userSubPath = '/' + pathSegments.slice(1).join('/');
+        const targetBasePath = targetUrl.pathname;
+
+        // Case 1: 用户只访问了代理的根路径 (e.g., /epgdiyp/ or /epgxml/)
+        // 此时直接使用配置中指定的完整路径 (e.g., /epgphp/index.php)
+        if (userSubPath === '/') {
+            return targetBasePath;
+        }
+
+        // Case 2: 用户访问了子路径 (e.g., /epgdiyp/some/page)
+        // 此时，需要将子路径附加到目标URL的父目录上
+        let targetDir = targetBasePath;
+        const lastSegment = targetBasePath.split('/').pop();
+
+        // 如果目标URL包含文件名，我们就取它的父目录
         if (lastSegment && lastSegment.includes('.')) {
-            basePath = basePath.substring(0, basePath.lastIndexOf('/'));
+            targetDir = targetBasePath.substring(0, targetBasePath.lastIndexOf('/'));
         }
         
-        // 确保基础路径以'/'结尾，并且子路径以'/'开头，然后合并，避免出现'//'
-        return (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath) + (userSubPath === '/' ? (lastSegment.includes('.') ? '' : '/') : userSubPath);
+        // 确保目录以单个斜杠结尾，然后拼接子路径
+        return (targetDir.endsWith('/') ? targetDir : targetDir + '/') + userSubPath.substring(1);
     };
 
     const finalPath = buildFinalPath();
@@ -79,7 +86,7 @@ export async function onRequest(context) {
     if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
         return forwardWebSocket(context.request, targetUrl, finalPath);
     }
-
+    
     // 2. 构建常规 HTTP 请求
     const targetRequestUrl = new URL(targetUrl);
     targetRequestUrl.pathname = finalPath;
@@ -92,32 +99,32 @@ export async function onRequest(context) {
     let response = await fetch(newRequest);
     response = new Response(response.body, response);
 
+    // 3. 重写响应头 (Cookie, Location) - 这部分逻辑保持不变，依然是正确的
     const proxyHost = url.host;
 
-    // *** 核心修正：增强重定向处理 ***
     const locationHeader = response.headers.get('Location');
     if (locationHeader) {
         let newLocation = locationHeader;
-        if (locationHeader.startsWith(targetUrl.origin)) {
-            // 绝对路径重定向
-            newLocation = locationHeader.replace(targetUrl.origin, `${url.origin}/${routePrefix || ''}`);
-        } else if (locationHeader.startsWith('/')) {
-            // 根相对路径重定向
-            newLocation = `/${routePrefix || ''}${locationHeader}`;
+        try {
+            const locationUrl = new URL(locationHeader, targetUrl);
+            if (locationUrl.hostname === targetUrl.hostname) {
+                newLocation = locationHeader.replace(targetUrl.origin, `${url.origin}/${routePrefix || ''}`);
+            }
+        } catch (e) { // 处理相对路径
+            if (locationHeader.startsWith('/')) {
+                newLocation = `/${routePrefix || ''}${locationHeader}`;
+            }
         }
-        // 对于路径相对的重定向 (如 "epgphp.html")，我们不修改它。
-        // 浏览器会正确请求 `.../epgdiyp/epgphp.html`，而我们新的路径合并逻辑会正确处理它。
         response.headers.set('Location', newLocation);
     }
     
-    // 3. 重写响应头 (Cookie) - 无需修改
     const cookieHeader = response.headers.get('Set-Cookie');
     if (cookieHeader) {
         const newCookieHeader = cookieHeader.replace(new RegExp(`domain=${targetUrl.host}`, 'gi'), `domain=${proxyHost}`);
         response.headers.set('Set-Cookie', newCookieHeader);
     }
 
-    // 4. 使用 HTMLRewriter 重写响应体中的链接 - 无需修改
+    // 4. 使用 HTMLRewriter 重写响应体中的链接 - 保持不变
     const contentType = response.headers.get('Content-Type');
     if (contentType && contentType.includes('text/html')) {
         const rewriter = new HTMLRewriter()
