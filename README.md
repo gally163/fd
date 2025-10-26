@@ -36,8 +36,7 @@
 
 ## 架构掠影 · How It Shines
 
-```mermaid
-graph TD
+```graph TD
     subgraph 用户 (User's Browser)
         A[访问 your.pages.dev/site-A/]
         B[访问 your.pages.dev/site-B/ws]
@@ -65,6 +64,7 @@ graph TD
     end
     
     H --> A
+
 ```
 
 ## 启程指南 · Quick Start
