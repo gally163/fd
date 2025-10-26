@@ -1,29 +1,105 @@
-代码解释
-获取 URL: new URL(context.request.url) 获取当前请求的完整 URL 信息。
+当然，一份优雅的 README 不仅仅是说明，更是项目的灵魂和门面。它应当如诗篇般引人入胜，如画卷般清晰明了。
 
-解析路径: url.pathname.split('/').filter(Boolean) 将路径（如 /example.com/path）分割成数组 ['example.com', 'path']。filter(Boolean) 是一个小技巧，用于移除因开头和结尾的 / 而产生的空字符串。
+这里为您精心撰写了一份 README，您可以将它保存为项目根目录下的 `README.md` 文件。
 
-根目录处理: 判断 pathSegments 数组是否为空。如果为空，说明用户访问的是根目录，此时返回一个 HTML 页面作为使用说明。
+---
 
-构建目标 URL: 将数组的第一个元素 pathSegments[0] 作为目标域名 (targetHost)，剩下的部分重新组合成路径 (targetPath)。然后默认使用 https:// 协议拼接成完整的 URL。
+# ✨ Starlight Proxy (星光代理)
 
-保留查询参数: targetUrl.search = url.search 确保原始请求中的查询参数（如 ?key=value）被传递到目标服务器。
+**— 于云端之巅，以 Cloudflare Pages 编织万维之网 —**
 
-创建新请求: new Request(targetUrl, context.request) 创建一个指向目标服务器的新请求，并复制原始请求的方法（GET/POST）、Body 等。
+<p align="center">
+  <img src="https://img.shields.io/badge/Powered%20by-Cloudflare%20Pages-F38020?logo=cloudflare&logoColor=white" alt="Powered by Cloudflare Pages"/>
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/>
+</p>
 
-修改 Host 头: newRequest.headers.set('Host', targetHost) 是反向代理的核心。它告诉目标服务器，我们想要访问的是 targetHost 这个网站。没有这一步，很多网站会返回错误。
+这不是一段寻常的代码，而是一座架设在 Cloudflare 全球网络之上的数字桥梁。它将您朴素的 Cloudflare Pages 站点，幻化为一个强大、优雅且功能完备的反向代理网关。
 
-返回响应: return fetch(newRequest) 将请求发送出去，并把从目标服务器收到的响应原封不动地返回给最初的用户。
+您的域名，自此成为一把万能钥匙，能开启散落在互联网各处的宝藏，将它们无缝地汇聚于一处，并以您独有的方式呈现给世界。无论是为了整合服务、隐藏源站，还是为了突破限制，`Starlight Proxy` 都将以极致的性能与简约的艺术，为您铺平道路。
 
-重要注意事项
-开放代理风险 (Open Proxy): 这个实现是一个完全开放的代理。任何人只要知道了你的域名，就可以用它来代理任何网站。这可能会被滥用，例如用于隐藏恶意行为的来源。请确保你了解这个风险，不要在生产环境中随意暴露此类代理。
+---
 
-功能限制:
+## 核心特性 · The Art of Proxy
 
-Cookie: 目标网站设置的 Cookie 域名归属目标网站，你的代理域名无法直接使用，可能导致需要登录的网站无法正常工作。
+*   🎨 **多站点路由 (Multi-Site Routing)**
+    *   您的域名如同一座星际之门，通过简单的路径前缀，即可传送至任何目标网站。无论是目录还是具体文件，皆可精准映射，万千世界，尽在掌握。
 
-绝对链接: 如果目标网站页面中的链接是写死的绝对路径（例如 href="https://example.com/about"），点击后会离开你的代理。
+*   🍪 **无缝会话保持 (Seamless Session Handling)**
+    *   跨越域名的鸿沟，让 Cookie 如同归巢的信鸽，自由往返。用户的每一次登录、每一次会话，都被温柔地保持，体验如丝般顺滑，毫无割裂之感。
 
-客户端脚本 (JavaScript): 页面中的 JavaScript 如果发起网络请求（AJAX/Fetch），可能会因为跨域（CORS）策略而被浏览器阻止。
+*   🔗 **动态内容重写 (Dynamic Content Rewriting)**
+    *   代码化身一位技艺精湛的画师，在响应内容送达浏览器前，悄然重绘页面中的每一处链接。绝对路径、相对路径，皆被巧妙地转换为代理后的地址，确保每一次点击都停留在您的星光之下。
 
-协议: 此代码默认所有目标网站都使用 https。如果需要代理 http 网站，需要更复杂的逻辑来判断或指定协议。
+*   🚀 **WebSocket 透明直通 (Transparent WebSocket Passthrough)**
+    *   为实时数据流开辟一条不受干扰的“量子通道”。无论是即时通讯、在线游戏还是实时行情，WebSocket 连接都将畅行无阻，仿佛代理从未存在。
+
+*   ⚙️ **配置即艺术 (Configuration as Art)**
+    *   我们坚信，至繁归于至简。您只需在 `routingRules` 中描绘您的代理蓝图，剩下的所有复杂工作，都由 `Starlight Proxy` 在背后优雅完成。
+
+## 架构掠影 · How It Shines
+
+```mermaid
+graph TD
+    subgraph 用户 (User's Browser)
+        A[访问 your.pages.dev/site-A/]
+        B[访问 your.pages.dev/site-B/ws]
+    end
+
+    subgraph Starlight Proxy (on Cloudflare Pages)
+        C{_middleware.js}
+        C -- HTTP 请求 --> D[重写请求头 & URL]
+        C -- WebSocket 请求 --> E[建立 WebSocket 通道]
+    end
+
+    subgraph 目标世界 (Target Websites)
+        F[Website A (example.com)]
+        G[Website B (realtime-app.net)]
+    end
+    
+    A --> C
+    B --> C
+    D --> F
+    E --> G
+
+    subgraph 返回之旅 (Response Journey)
+        F -- HTML响应 --> H{HTMLRewriter: 重写链接}
+        G -- WebSocket流 --> E
+    end
+    
+    H --> A
+```
+
+## 启程指南 · Quick Start
+
+只需四步，即可点亮您的星光代理：
+
+1.  **获取代码**: 将本项目中的 `functions` 目录完整地放入您的项目仓库中。
+
+2.  **创建站点**: 登录 Cloudflare 控制台，使用您的代码仓库创建一个新的 Cloudflare Pages 项目。构建设置可留空，因为我们只依赖于 Functions。
+
+3.  **描绘蓝图**: 打开 `functions/_middleware.js` 文件，在顶部的 `routingRules` 对象中，添加您的代理规则。
+    ```javascript
+    // functions/_middleware.js
+
+    const routingRules = {
+      // 访问 your.pages.dev/blog/ 将代理到 https://ghost-blog.com/
+      'blog': 'https://ghost-blog.com/',
+
+      // 访问 your.pages.dev/stream/ 将代理到 https://live.example.com/player.html
+      'stream': 'https://live.example.com/player.html',
+      
+      // ... 在此添加更多属于您的星辰
+    };
+    ```
+
+4.  **部署启航**: 提交并推送您的代码。Cloudflare Pages 将自动完成部署。片刻之后，访问您的 `*.pages.dev` 域名，即可见证奇迹。
+
+## 许可证 · License
+
+采用 [MIT](LICENSE) 许可证。
+
+---
+
+<p align="center">
+  <i>愿星光，照亮您的网络之旅。</i>
+</p>
