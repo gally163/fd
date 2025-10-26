@@ -34,91 +34,99 @@ const defaultTargetUrl = null;
 // ... (文件顶部的配置区域和其他函数保持不变) ...
 
 export async function onRequest(context) {
-  const url = new URL(context.request.url);
-  const pathSegments = url.pathname.split('/').filter(Boolean);
-  const routePrefix = pathSegments[0];
+    const url = new URL(context.request.url);
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    const routePrefix = pathSegments[0];
 
-  let targetUrlStr = null;
-  
-  // *** 核心修改点 ***
-  // 我们需要同时确定目标URL和用户请求的子路径
-  let targetUrl;
-  let userSubPath = '/';
+    let targetUrlStr = null;
+    let targetUrl;
+    let userSubPath = '/';
 
-  // 1. 寻找匹配的路由
-  if (routePrefix && routingRules[routePrefix]) {
-    targetUrlStr = routingRules[routePrefix];
-    targetUrl = new URL(targetUrlStr);
-    // 获取用户在代理前缀之后输入的路径
-    userSubPath = '/' + pathSegments.slice(1).join('/');
-  } else if (defaultTargetUrl) {
-    targetUrlStr = defaultTargetUrl;
-    targetUrl = new URL(targetUrlStr);
-    userSubPath = url.pathname;
-  } else {
-    return new Response(generateHomepage(), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
-  }
+    // 1. 寻找匹配的路由
+    if (routePrefix && routingRules[routePrefix]) {
+        targetUrlStr = routingRules[routePrefix];
+        targetUrl = new URL(targetUrlStr);
+        userSubPath = '/' + pathSegments.slice(1).join('/');
+    } else if (defaultTargetUrl) {
+        targetUrlStr = defaultTargetUrl;
+        targetUrl = new URL(targetUrlStr);
+        userSubPath = url.pathname;
+    } else {
+        return new Response(generateHomepage(), {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+    }
 
-  // --- WebSocket 代理支持 ---
-  const upgradeHeader = context.request.headers.get('Upgrade');
-  if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-    // WebSocket 逻辑需要合并路径，我们构造一个临时的 newPathname
-    const finalWsPath = (targetUrl.pathname.endsWith('/') ? targetUrl.pathname.slice(0, -1) : targetUrl.pathname) + (userSubPath === '/' ? '' : userSubPath);
-    return forwardWebSocket(context.request, targetUrl, finalWsPath);
-  }
-  // --- WebSocket 逻辑结束 ---
+    // *** 核心修正：智能路径合并 ***
+    // 决定最终请求的路径
+    const buildFinalPath = () => {
+        let basePath = targetUrl.pathname;
+        const lastSegment = basePath.split('/').pop();
+        
+        // 如果目标路径包含文件名（判断依据：最后一段包含'.')，则使用其父目录作为基础路径
+        if (lastSegment && lastSegment.includes('.')) {
+            basePath = basePath.substring(0, basePath.lastIndexOf('/'));
+        }
+        
+        // 确保基础路径以'/'结尾，并且子路径以'/'开头，然后合并，避免出现'//'
+        return (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath) + (userSubPath === '/' ? (lastSegment.includes('.') ? '' : '/') : userSubPath);
+    };
 
+    const finalPath = buildFinalPath();
 
-  // 2. 如果是常规 HTTP 请求，执行以下逻辑
+    // --- WebSocket 代理支持 ---
+    const upgradeHeader = context.request.headers.get('Upgrade');
+    if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+        return forwardWebSocket(context.request, targetUrl, finalPath);
+    }
 
-  // *** 核心修改点：智能合并路径 ***
-  // 获取目标配置中的基础路径，例如 "/epgphp/index.php"
-  const targetBasePath = targetUrl.pathname;
-  // 如果用户只访问了根路径（例如 /epgdiyp/），userSubPath 会是 "/"，我们不应将其附加到文件名后
-  const finalPath = (userSubPath === '/') 
-    ? targetBasePath 
-    : (targetBasePath.endsWith('/') ? targetBasePath.slice(0, -1) : targetBasePath) + userSubPath;
+    // 2. 构建常规 HTTP 请求
+    const targetRequestUrl = new URL(targetUrl);
+    targetRequestUrl.pathname = finalPath;
+    targetRequestUrl.search = url.search;
 
-  const targetRequestUrl = new URL(targetUrl);
-  targetRequestUrl.pathname = finalPath; // 使用合并后的最终路径
-  targetRequestUrl.search = url.search;
+    const newRequest = new Request(targetRequestUrl, context.request);
+    newRequest.headers.set('Host', targetUrl.hostname);
+    newRequest.headers.set('Referer', targetUrl.origin);
 
-  const newRequest = new Request(targetRequestUrl, context.request);
-  newRequest.headers.set('Host', targetUrl.hostname);
-  newRequest.headers.set('Referer', targetUrl.origin);
+    let response = await fetch(newRequest);
+    response = new Response(response.body, response);
 
-  let response = await fetch(newRequest);
-  response = new Response(response.body, response);
+    const proxyHost = url.host;
 
-  const proxyHost = url.host;
-  
-  // 3. 重写响应头 (Cookie 和 Location)
-  // ... (这部分逻辑无需修改，保持原样)
-  const cookieHeader = response.headers.get('Set-Cookie');
-  if (cookieHeader) {
-    const newCookieHeader = cookieHeader.replace(new RegExp(`domain=${targetUrl.host}`, 'gi'), `domain=${proxyHost}`);
-    response.headers.set('Set-Cookie', newCookieHeader);
-  }
+    // *** 核心修正：增强重定向处理 ***
+    const locationHeader = response.headers.get('Location');
+    if (locationHeader) {
+        let newLocation = locationHeader;
+        if (locationHeader.startsWith(targetUrl.origin)) {
+            // 绝对路径重定向
+            newLocation = locationHeader.replace(targetUrl.origin, `${url.origin}/${routePrefix || ''}`);
+        } else if (locationHeader.startsWith('/')) {
+            // 根相对路径重定向
+            newLocation = `/${routePrefix || ''}${locationHeader}`;
+        }
+        // 对于路径相对的重定向 (如 "epgphp.html")，我们不修改它。
+        // 浏览器会正确请求 `.../epgdiyp/epgphp.html`，而我们新的路径合并逻辑会正确处理它。
+        response.headers.set('Location', newLocation);
+    }
+    
+    // 3. 重写响应头 (Cookie) - 无需修改
+    const cookieHeader = response.headers.get('Set-Cookie');
+    if (cookieHeader) {
+        const newCookieHeader = cookieHeader.replace(new RegExp(`domain=${targetUrl.host}`, 'gi'), `domain=${proxyHost}`);
+        response.headers.set('Set-Cookie', newCookieHeader);
+    }
 
-  const locationHeader = response.headers.get('Location');
-  if (locationHeader) {
-      const newLocation = locationHeader.replace(targetUrl.origin, `${url.origin}/${routePrefix || ''}`);
-      response.headers.set('Location', newLocation);
-  }
+    // 4. 使用 HTMLRewriter 重写响应体中的链接 - 无需修改
+    const contentType = response.headers.get('Content-Type');
+    if (contentType && contentType.includes('text/html')) {
+        const rewriter = new HTMLRewriter()
+            .on('a[href], link[href], form[action]', new AttributeRewriter('href', 'action', targetUrl, url, routePrefix))
+            .on('img[src], script[src]', new AttributeRewriter('src', 'src', targetUrl, url, routePrefix));
+        return rewriter.transform(response);
+    }
 
-  // 4. 使用 HTMLRewriter 重写响应体中的链接
-  // ... (这部分逻辑无需修改，保持原样)
-  const contentType = response.headers.get('Content-Type');
-  if (contentType && contentType.includes('text/html')) {
-    const rewriter = new HTMLRewriter()
-      .on('a[href], link[href], form[action]', new AttributeRewriter('href', 'action', targetUrl, url, routePrefix))
-      .on('img[src], script[src]', new AttributeRewriter('src', 'src', targetUrl, url, routePrefix));
-    return rewriter.transform(response);
-  }
-
-  return response;
+    return response;
 }
 
 // ... (文件底部的其他函数保持不变) ...
